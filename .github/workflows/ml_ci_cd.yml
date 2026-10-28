@@ -1,0 +1,72 @@
+name: ML Flight Price Prediction CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  repository_dispatch:
+    types: [ ml_ci_cd ]
+
+jobs:
+  ml_ci_cd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: python version
+        run: python --version
+
+      - name: pip install
+        run: pip install -r requirements.txt
+
+      - name: download dataset
+        env:
+          DATASET_URL: ${{ github.event.client_payload.dataseturl }}
+          TRAINING_SHA: ${{ github.event.client_payload.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DATASET_URL" ]; then
+            DATASET_URL="https://github.com/Yan25102309/deploy-flight-price-prediction/releases/download/v1.0-data/Clean_Dataset_100.csv"
+            echo "No dispatch dataset provided; using the 100% dataset"
+          fi
+          if [ -z "$TRAINING_SHA" ]; then
+            TRAINING_SHA="automatic-${GITHUB_SHA}"
+          fi
+          {
+            echo "### ML training input"
+            echo "- Dataset: \`$DATASET_URL\`"
+            echo "- Training SHA: \`$TRAINING_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Downloading dataset from the configured release asset"
+          curl --fail --location --retry 3 --silent --show-error \
+            --output data/Clean_Dataset.csv "$DATASET_URL"
+          test -s data/Clean_Dataset.csv
+        
+      - name: cat dataset 
+        run: cat data/Clean_Dataset.csv
+
+      - name: train model
+        run: python model/train.py
+
+      - name: docker build
+        run: docker build -t ${{ secrets.DOCKER_USER}}/${{secrets.MODEL_NAME}}:${{github.sha}} .
+
+      - name: show images
+        run: docker images
+
+      - name: docker login
+        env:
+          DOCKER_USER: ${{secrets.DOCKER_USER}}
+          DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+        run: |
+          docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+
+      - name: docker Push
+        run: docker push ${{ secrets.DOCKER_USER}}/${{secrets.MODEL_NAME}}:${{github.sha}}

@@ -1,0 +1,183 @@
+<main class="page-shell">
+  <section class="app-card">
+    <header class="page-header">
+      <div class="brand-mark" aria-hidden="true">✈️</div>
+      <div>
+        <h1>Predicción de Precios de Vuelos</h1>
+        <p>Consulta el precio estimado de un vuelo y administra el re-entrenamiento del modelo.</p>
+      </div>
+    </header>
+
+    <div class="sections">
+      <section class="section-block" aria-labelledby="prediction-title">
+        <div class="section-heading">
+          <div class="section-icon blue" aria-hidden="true">⌁</div>
+          <div>
+            <h2 id="prediction-title">Consumir Predicción</h2>
+            <p>Selecciona el modelo y completa los datos del vuelo.</p>
+          </div>
+        </div>
+
+        <form (ngSubmit)="predictPrice()" #predictionForm="ngForm">
+          <label class="full-width">
+            Dataset / Modelo a consultar
+            <select name="predictionModel" [(ngModel)]="selectedModel" required>
+              @for (model of predictionModels; track model.endpoint) {
+                <option [ngValue]="model">{{ model.label }}</option>
+              }
+            </select>
+          </label>
+
+          <div class="form-grid">
+            <label>
+              Aerolínea
+              <select name="airline" [(ngModel)]="flight.airline" required>
+                @for (airline of airlines; track airline) {
+                  <option [value]="airline">{{ airline }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Ciudad de origen
+              <select name="sourceCity" [(ngModel)]="flight.source_city" required>
+                @for (city of cities; track city) {
+                  <option [value]="city">{{ city }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Hora de salida
+              <select name="departureTime" [(ngModel)]="flight.departure_time" required>
+                @for (time of departureTimes; track time) {
+                  <option [value]="time">{{ time }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Escalas
+              <select name="stops" [(ngModel)]="flight.stops" required>
+                @for (stops of stopsOptions; track stops) {
+                  <option [value]="stops">{{ stops }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Hora de llegada
+              <select name="arrivalTime" [(ngModel)]="flight.arrival_time" required>
+                @for (time of arrivalTimes; track time) {
+                  <option [value]="time">{{ time }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Ciudad de destino
+              <select name="destinationCity" [(ngModel)]="flight.destination_city" required>
+                @for (city of cities; track city) {
+                  <option [value]="city">{{ city }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Clase
+              <select name="flightClass" [(ngModel)]="flight.flight_class" required>
+                <option value="Economy">Economy</option>
+                <option value="Business">Business</option>
+              </select>
+            </label>
+            <label>
+              Duración (horas)
+              <input name="duration" type="number" min="0.1" step="0.01" [(ngModel)]="flight.duration" required />
+            </label>
+            <label>
+              Días de anticipación
+              <input name="daysLeft" type="number" min="0" step="1" [(ngModel)]="flight.days_left" required />
+            </label>
+          </div>
+
+          <button class="primary-button" type="submit" [disabled]="predictionLoading || predictionForm.invalid">
+            @if (predictionLoading) {
+              <span class="spinner" aria-hidden="true"></span> Calculando...
+            } @else {
+              Calcular Predicción <span aria-hidden="true">→</span>
+            }
+          </button>
+        </form>
+
+        @if (estimatedPrice !== null) {
+          <div class="result-panel" role="status">
+            <span>Precio Estimated ({{ selectedModel.label }})</span>
+            <strong>{{ estimatedPrice | currency:'USD':'symbol':'1.0-2' }}</strong>
+          </div>
+        } @else if (predictionError) {
+          <div class="message error" role="alert">{{ predictionError }}</div>
+        }
+      </section>
+
+      <section class="section-block training-block" aria-labelledby="training-title">
+        <div class="section-heading">
+          <div class="section-icon purple" aria-hidden="true">⚙</div>
+          <div>
+            <h2 id="training-title">Re-entrenar Modelo</h2>
+            <p>Inicia el workflow de GitHub Actions con otro dataset.</p>
+          </div>
+        </div>
+
+        <form (ngSubmit)="triggerRetraining()" #retrainingForm="ngForm">
+          <label>
+            Dataset a re-entrenar
+            <select
+              name="trainingDataset"
+              [(ngModel)]="selectedDataset"
+              (ngModelChange)="updateTrainingSha()"
+              required
+            >
+              @for (dataset of trainingDatasets; track dataset.sha) {
+                <option [ngValue]="dataset">{{ dataset.label }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            SHA identificador del re-entrenamiento
+            <input
+              name="retrainingSha"
+              type="text"
+              [(ngModel)]="retrainingSha"
+              placeholder="v1.0-flight-50"
+              autocomplete="off"
+              required
+            />
+            <small>Este valor se enviará en client_payload.sha a GitHub Actions.</small>
+          </label>
+          <label>
+            GitHub Personal Access Token (PAT)
+            <input
+              name="githubToken"
+              type="password"
+              [(ngModel)]="githubToken"
+              placeholder="Introduce tu token"
+              autocomplete="off"
+              required
+            />
+            <small>El token se envía directamente a GitHub y no se almacena.</small>
+          </label>
+
+          <button class="secondary-button" type="submit" [disabled]="retrainingLoading || retrainingForm.invalid">
+            @if (retrainingLoading) {
+              <span class="spinner" aria-hidden="true"></span> Enviando...
+            } @else {
+              Disparar Re-entrenamiento <span aria-hidden="true">↗</span>
+            }
+          </button>
+        </form>
+
+        @if (retrainingMessage) {
+          <div class="message success" role="status">{{ retrainingMessage }}</div>
+        } @else if (retrainingError) {
+          <div class="message error" role="alert">{{ retrainingError }}</div>
+        } @else {
+          <div class="message neutral" role="status">Listo para iniciar el workflow de entrenamiento.</div>
+        }
+      </section>
+    </div>
+  </section>
+</main>
